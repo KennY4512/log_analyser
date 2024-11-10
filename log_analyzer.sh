@@ -1,1 +1,107 @@
 #!/bin/bash
+
+# Fonction de vérification des arguments 1 et 2
+inputcheck () {
+
+    # Vérification de la présence et de la bonne syntax de l'argument 1
+    if [ "$1" == "" ]; then
+        echo -e "\e[31;1mErreur :\nVeuillez fournir une action à réaliser (aggregate - temporal_analysis)\e[0m"
+        exit 1
+    elif [ "$1" != "aggregate" -a "$1" != "temporal_analysis" ]; then
+        echo -e "\e[31;1mErreur :\nSyntax incorrecte dans le premier argument (aggregate - temporal_analysis)\e[0m"
+        exit 1
+    fi
+
+    # Vérification de la présence et de la bonne syntax de l'argument 2
+    if [ "$2" == "" ]; then
+        echo -e "\e[31;1mErreur :\nVeuillez fournir un fichier log (.log) à analyser\e[0m"
+        exit 1
+    elif [[ ! "$2" =~ \.log$ ]]; then
+        echo -e "\e[31;1mErreur :\nLe fichier fourni n'est pas un fichier .log\e[0m"
+        exit 1
+    fi
+
+}
+
+# Fonction de parsage et d'agrégation des donnés des logs
+aggregate () {
+
+    trace_count=0
+    debug_count=0
+    info_count=0
+    warn_count=0
+    error_count=0
+    fatal_count=0
+
+    while IFS=: read -r level count; do
+        case "$level" in
+            "trace") trace_count=$count ;;
+            "debug") debug_count=$count ;;
+            "info") info_count=$count ;;
+            "warn") warn_count=$count ;;
+            "error") error_count=$count ;;
+            "fatal") fatal_count=$count ;;
+        esac
+    done < <(awk -F'[][]' '
+    {
+        counts[$2]++
+    }
+    END {
+        for (level in counts) {
+            print level ":" counts[level]
+        }
+    }' "$1")
+
+    msg_info=$(awk -F'msg="' '
+    {
+        msg = $2
+        gsub(/".*/, "", msg)
+        msg_counts[msg]++
+    }
+    END {
+        max_count = 0
+        min_count = 999999
+        for (msg in msg_counts) {
+            if (msg_counts[msg] > max_count) {
+                max_count = msg_counts[msg]
+                most_common_msg = msg
+            }
+            if (msg_counts[msg] < min_count) {
+                min_count = msg_counts[msg]
+                least_common_msg = msg
+            }
+        }
+        print most_common_msg ":" max_count
+        print least_common_msg ":" min_count
+    }' "$1")
+
+    IFS=':' read -r most_common_msg most_common_msg_count <<< "$(echo "$msg_info" | head -n 1)"
+    IFS=':' read -r least_common_msg least_common_msg_count <<< "$(echo "$msg_info" | tail -n 1)"
+
+    echo "=-= Aggregating file \"$1\" =-="
+    echo ""
+    echo "Log level counts:"
+    echo " - trace: $trace_count"
+    echo " - debug: $debug_count"
+    echo " - info: $info_count"
+    echo " - warn: $warn_count"
+    echo " - error: $error_count"
+    echo " - fatal: $fatal_count"
+    echo ""
+    echo "Most common message: \"$most_common_msg\" (count: $most_common_msg_count)"
+    echo "Least common message: \"$least_common_msg\" (count: $least_common_msg_count)"
+    echo ""
+    echo "=-= End of report =-="
+}
+
+# Nettoyage du terminal
+clear
+
+# Vérification des deux arguments passés
+inputcheck $1 $2
+
+if [ "$1" == "aggregate" ]; then
+    aggregate $2
+elif [ "$1" == "temporal_analysis" ]; then
+    echo "to be dev"
+fi
