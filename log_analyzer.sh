@@ -37,6 +37,7 @@ inputcheck () {
 # Fonction de parsage et d'agrégation des donnés des logs
 aggregate () {
 
+    # Initialisation des variables de niveau de log à 0
     trace_count=0
     debug_count=0
     info_count=0
@@ -44,6 +45,7 @@ aggregate () {
     error_count=0
     fatal_count=0
 
+    # Comptage et sockage des quantité de chaque niveau de log
     while IFS=: read -r level count; do
         case "$level" in
             "trace") trace_count=$count ;;
@@ -63,6 +65,7 @@ aggregate () {
         }
     }' "$1")
 
+    # Comptage de chaque message et stockage du plus et du moins récurent
     msg_info=$(awk -F'msg="' '
     {
         msg = $2
@@ -89,6 +92,7 @@ aggregate () {
     IFS=':' read -r most_common_msg most_common_msg_count <<< "$(echo "$msg_info" | head -n 1)"
     IFS=':' read -r least_common_msg least_common_msg_count <<< "$(echo "$msg_info" | tail -n 1)"
 
+    # Affichage des résultats
     echo "=-= Aggregating file \"$1\" =-="
     echo ""
     echo "Log level counts:"
@@ -105,6 +109,56 @@ aggregate () {
     echo "=-= End of report =-="
 }
 
+temporal_analysis () {
+
+    # Jours de la semaine avec le plus de messages
+    most_act_day_num=$(awk '{
+        split($2, date, "T")
+        split(date[1], date_cuted, "-");
+        year = date_cuted[1];
+        month = date_cuted[2];
+        day = date_cuted[3];
+
+        if (month < 3) {
+            month += 12;
+            year--;
+        }
+        weekday = (day + int(13 * (month + 1) / 5) + year + int(year / 4) - int(year / 100) + int(year / 400)) % 7;
+
+        counts[weekday]++
+    }
+    END {
+        max_count = 0
+        for (day in counts) {
+            if (counts[day] > max_count) {
+                max_count = counts[day]
+                m_act_d = day
+            }
+        }
+        print m_act_d
+    }' "$1")
+
+    # Convertion du numéro de jour en lettres
+    case $most_act_day_num in
+        0) most_active_day="saturday" ;;
+        1) most_active_day="sunday" ;;
+        2) most_active_day="monday" ;;
+        3) most_active_day="tuesday" ;;
+        4) most_active_day="wednesday" ;;
+        5) most_active_day="thrusday" ;;
+        6) most_active_day="friday" ;;
+    esac
+
+    # Affichage des résultats
+    echo "=-= \"$1\" temporal analysis =-="
+    echo ""
+    echo "Most active day: $most_active_day"
+    # echo "Most active hour: $most_active_hour"
+    # echo "Most error-prone hour: $most_errors_hour"
+    echo ""
+    echo "=-= End of report =-="
+}
+
 # Nettoyage du terminal
 clear
 
@@ -114,5 +168,5 @@ inputcheck $1 $2
 if [ "$1" == "aggregate" ]; then
     aggregate $2
 elif [ "$1" == "temporal_analysis" ]; then
-    echo "to be dev"
+    temporal_analysis $2
 fi
