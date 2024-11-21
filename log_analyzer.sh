@@ -8,7 +8,8 @@ inputcheck () {
         echo -e "\e[31;1mVeuillez spécifier l'un des 2 paramètres ci-dessous suivit d'un fichier log valable :\e[0m"
         echo -e "\e[31;1maggregate :\e[0m \e[31magrégation du fichier log\e[0m"
         echo -e "\e[31;1mtemporal_analysis :\e[0m \e[31manalyse temporelle du fichier log\n\e[0m"
-        echo -e "\e[31;1mExemple d'appel :\e[0m \e[31m./log_analyser.sh aggregate logfile.log\e[0m"
+        echo -e "\e[31;1mExemple d'appel :\e[0m \e[31m./log_analyser.sh aggregate logfile.log\n\e[0m"
+        echo -e "\e[31;1mExemple de format log attendu :\e[0m \e[31m[fatal] 2023-11-05T17:25:59.26159941+01:00 msg=\"division by zero\"\e[0m"
         exit 1
     fi
 
@@ -21,7 +22,7 @@ inputcheck () {
         exit 1
     fi
 
-    # Vérification de la présence, de la bonne syntax de l'argument 2 et du fichier log fourni
+    # Vérification de la présence, de la syntax de l'argument 2 et du fichier log fourni
     if [ "$2" == "" ]; then
         echo -e "\e[31;1mErreur :\nVeuillez fournir un fichier de log à analyser !\e[0m"
         exit 1
@@ -34,7 +35,7 @@ inputcheck () {
     fi
 }
 
-# Fonction de parsage et d'agrégation des donnés des logs
+# Fonction de parsage et d'agrégation des logs
 aggregate () {
 
     # Initialisation des variables de niveau de log à 0
@@ -65,7 +66,7 @@ aggregate () {
         }
     }' "$1")
 
-    # Comptage de chaque message et stockage du plus et du moins récurent
+    # Comptage de chaque message du plus et du moins récurent
     msg_info=$(awk -F'msg="' '
     {
         msg = $2
@@ -75,6 +76,7 @@ aggregate () {
     END {
         max_count = 0
         min_count = 999999
+        
         for (msg in msg_counts) {
             if (msg_counts[msg] > max_count) {
                 max_count = msg_counts[msg]
@@ -85,12 +87,14 @@ aggregate () {
                 least_common_msg = msg
             }
         }
-        print most_common_msg ":" max_count
-        print least_common_msg ":" min_count
+        print most_common_msg "\n" max_count "\n" least_common_msg "\n" min_count
     }' "$1")
 
-    IFS=':' read -r most_common_msg most_common_msg_count <<< "$(echo "$msg_info" | head -n 1)"
-    IFS=':' read -r least_common_msg least_common_msg_count <<< "$(echo "$msg_info" | tail -n 1)"
+    # Stockage des résultats précedents
+    most_common_msg="$(echo "$msg_info" | sed -n 1p)"
+    most_common_msg_count="$(echo "$msg_info" | sed -n 2p)"
+    least_common_msg="$(echo "$msg_info" | sed -n 3p)"
+    least_common_msg_count="$(echo "$msg_info" | sed -n 4p)"
 
     # Affichage des résultats
     echo "=-= Aggregating file \"$1\" =-="
@@ -109,21 +113,21 @@ aggregate () {
     echo "=-= End of report =-="
 }
 
+ # Fonction d'analyse temporelle des logs
 temporal_analysis () {
 
-    # Jours de la semaine avec le plus de messages
+    # Comptage du jour de la semaine avec le plus de messages
     most_act_day_num=$(awk '{
-        split($2, date, "T")
-        split(date[1], date_cuted, "-");
-        year = date_cuted[1];
-        month = date_cuted[2];
-        day = date_cuted[3];
+        year = int(substr($2, 1, 4))
+        month = int(substr($2, 6, 2))
+        day = int(substr($2, 9, 2))
 
         if (month < 3) {
-            month += 12;
-            year--;
+            month += 12
+            year--
         }
-        weekday = (day + int(13 * (month + 1) / 5) + year + int(year / 4) - int(year / 100) + int(year / 400)) % 7;
+
+        weekday = (day + int(13 * (month + 1) / 5) + year + int(year / 4) - int(year / 100) + int(year / 400)) % 7
 
         counts[weekday]++
     }
@@ -138,22 +142,31 @@ temporal_analysis () {
         print m_act_d
     }' "$1")
 
-    # Convertion du numéro de jour en lettres
-    case $most_act_day_num in
-        0) most_active_day="saturday" ;;
-        1) most_active_day="sunday" ;;
-        2) most_active_day="monday" ;;
-        3) most_active_day="tuesday" ;;
-        4) most_active_day="wednesday" ;;
-        5) most_active_day="thrusday" ;;
-        6) most_active_day="friday" ;;
-    esac
+    # Convertion du résultat précédent en jour de la semaine et stockage
+    days=("saturday" "sunday" "monday" "tuesday" "wednesday" "thursday" "friday")
+    most_active_day=${days[$most_act_day_num]}
+
+
+    most_active_hour=$(awk -F 'T' '{
+        split($2, hours, ":")
+        counts[hours[1]+0]++
+    }
+    END {
+        max_count = 0
+        for (hour in counts) {
+            if (counts[hour] > max_count) {
+                max_count = counts[hour]
+                m_act_h = hour
+            }
+        }
+        print m_act_h "h"
+    }' "$1")
 
     # Affichage des résultats
     echo "=-= \"$1\" temporal analysis =-="
     echo ""
     echo "Most active day: $most_active_day"
-    # echo "Most active hour: $most_active_hour"
+    echo "Most active hour: $most_active_hour"
     # echo "Most error-prone hour: $most_errors_hour"
     echo ""
     echo "=-= End of report =-="
@@ -165,6 +178,7 @@ clear
 # Vérification des deux arguments passés
 inputcheck $1 $2
 
+# Appel de la fonction correspondant à l'argument passé
 if [ "$1" == "aggregate" ]; then
     aggregate $2
 elif [ "$1" == "temporal_analysis" ]; then
