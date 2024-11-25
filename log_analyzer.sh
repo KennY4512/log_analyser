@@ -3,6 +3,7 @@
 # Fonction de vérification des arguments 1 et 2
 inputcheck () {
 
+    # Affichage d'une aide s'il n'y a aucun argument passé
     if [ "$#" == "0" ]; then
         echo -e "\e[31;1mAucun paramètre donné !\n\e[0m"
         echo -e "\e[31;1mVeuillez spécifier l'un des 2 paramètres ci-dessous suivit d'un fichier log valable :\e[0m"
@@ -67,7 +68,7 @@ aggregate () {
     }' "$1")
 
     # Comptage de chaque message du plus et du moins récurent
-    msg_info=$(awk -F'msg="' '
+    msg_info=$(awk -F 'msg="' '
     {
         msg = $2
         gsub(/".*/, "", msg)
@@ -82,11 +83,13 @@ aggregate () {
                 max_count = msg_counts[msg]
                 most_common_msg = msg
             }
+
             if (msg_counts[msg] < min_count) {
                 min_count = msg_counts[msg]
                 least_common_msg = msg
             }
         }
+
         print most_common_msg "\n" max_count "\n" least_common_msg "\n" min_count
     }' "$1")
 
@@ -97,15 +100,15 @@ aggregate () {
     least_common_msg_count="$(echo "$msg_info" | sed -n 4p)"
 
     # Affichage des résultats
-    echo "=-= Aggregating file \"$1\" =-="
+    echo -e "=-= Aggregating file \"\e[1m$1\e[0m\" =-="
     echo ""
     echo "Log level counts:"
-    echo -e " - \e[90mtrace\e[0m: \e[90;1m$trace_count\e[0m"
-    echo -e " - \e[34mdebug\e[0m: \e[34;1m$debug_count\e[0m"
-    echo -e " - \e[32minfo\e[0m: \e[32;1m$info_count\e[0m"
-    echo -e " - \e[33mwarn\e[0m: \e[33;1m$warn_count\e[0m"
-    echo -e " - \e[31merror\e[0m: \e[31;1m$error_count\e[0m"
-    echo -e " - \e[41mfatal\e[0m: \e[41;1m$fatal_count\e[0m"
+    echo -e " - \e[90mtrace: \e[1m$trace_count\e[0m"
+    echo -e " - \e[34mdebug: \e[1m$debug_count\e[0m"
+    echo -e " - \e[32minfo: \e[1m$info_count\e[0m"
+    echo -e " - \e[33mwarn: \e[1m$warn_count\e[0m"
+    echo -e " - \e[31merror: \e[1m$error_count\e[0m"
+    echo -e " - \e[41mfatal: \e[1m$fatal_count\e[0m"
     echo ""
     echo -e "Most common message: \"\e[1m$most_common_msg\e[0m\" (count: $most_common_msg_count)"
     echo -e "Least common message: \"\e[1m$least_common_msg\e[0m\" (count: $least_common_msg_count)"
@@ -113,7 +116,7 @@ aggregate () {
     echo "=-= End of report =-="
 }
 
- # Fonction d'analyse temporelle des logs
+# Fonction d'analyse temporelle des logs
 temporal_analysis () {
 
     # Comptage du jour de la semaine avec le plus de messages
@@ -128,17 +131,18 @@ temporal_analysis () {
         }
 
         weekday = (day + int(13 * (month + 1) / 5) + year + int(year / 4) - int(year / 100) + int(year / 400)) % 7
-
         counts[weekday]++
     }
     END {
         max_count = 0
+
         for (day in counts) {
             if (counts[day] > max_count) {
                 max_count = counts[day]
                 m_act_d = day
             }
         }
+
         print m_act_d
     }' "$1")
 
@@ -146,28 +150,48 @@ temporal_analysis () {
     days=("saturday" "sunday" "monday" "tuesday" "wednesday" "thursday" "friday")
     most_active_day=${days[$most_act_day_num]}
 
-
-    most_active_hour=$(awk -F 'T' '{
-        split($2, hours, ":")
-        counts[hours[1]+0]++
+    # Comptage de l'heure avec le plus de messages
+    most_active_hour=$(awk '{
+        counts[substr($2, 12, 2)+0]++
     }
     END {
         max_count = 0
+
         for (hour in counts) {
             if (counts[hour] > max_count) {
                 max_count = counts[hour]
                 m_act_h = hour
             }
         }
+
         print m_act_h "h"
     }' "$1")
 
+    # Comptage de l'heure avec le plus de messages fatal et error
+    most_errors_hour=$(awk -F '[][]' '{
+        if ($2 == "fatal" || $2 == "error") {
+            counts[substr($3, 13, 2)+0]++
+        }
+    }
+    END {
+        max_count = 0
+
+        for (erp_hour in counts) {
+            if (counts[erp_hour] > max_count) {
+                max_count = counts[erp_hour]
+                m_erp_h = erp_hour
+            }
+        }
+
+        print m_erp_h "h"
+    }' "$1")
+
     # Affichage des résultats
-    echo "=-= \"$1\" temporal analysis =-="
+    echo -e "=-= \"\e[1m$1\e[0m\" temporal analysis =-="
     echo ""
-    echo "Most active day: $most_active_day"
-    echo "Most active hour: $most_active_hour"
-    # echo "Most error-prone hour: $most_errors_hour"
+    echo -e "Most active day: \e[1m$most_active_day\e[0m"
+    echo -e "Most active hour: \e[1m$most_active_hour\e[0m"
+    echo -e "\e[31mMost error-prone hour: \e[1m$most_errors_hour\e[0m"
     echo ""
     echo "=-= End of report =-="
 }
